@@ -3,6 +3,9 @@
 import os
 import sys
 import random
+import math
+from colorama import Fore, Back, Style
+import threading
 
 random.seed()
 
@@ -57,10 +60,11 @@ class GearPeice:
     def __gt__(self, other):
         if isinstance(other, GearPeice):
             return self.cost > other.cost
+        return self.cost > other
     def __lt__(self, other):
         if isinstance(other, GearPeice):
             return self.cost < other.cost
-    
+        return self.cost > other
     def __str__(self):
         return "Cost = %i, Total stones = %i" % (self.cost, len(self.stonelist))
 
@@ -91,19 +95,19 @@ class GearPeice:
 
     def enchant(self, stone, supplements = 'none'):
         if isinstance(stone, EnchantmentStone):
+            if self.enchantLevel >= 15:
+                return
             if random.random() < self.calcChance(stone, supplements):
                 self.enchantLevel = self.enchantLevel + 1
             else:
-                if self.enchantLevel >= 15:
-                    return
-                elif self.enchantLevel > 10:
+                if self.enchantLevel > 10:
                     self.enchantLevel = 10
                 elif self.enchantLevel > 0:
                     self.enchantLevel = self.enchantLevel - 1
                 else:
                     self.enchantLevel = 0
-                self.cost = self.cost + stone.cost
-                self.stonelist.append(stone)
+            self.cost = self.cost + stone.cost
+            self.stonelist.append(stone)
         else:
             raise Exception("not enchantment stone")
 
@@ -136,49 +140,74 @@ enchantmentStones = [
     EnchantmentStone(95), 
     EnchantmentStone(95), 
     EnchantmentStone(95), 
+    EnchantmentStone(110),
+    EnchantmentStone(110),
     EnchantmentStone(105),
     EnchantmentStone(105),
-    EnchantmentStone(105),
-    EnchantmentStone(105),
-    EnchantmentStone(105)]
+    EnchantmentStone(110)]
 
-index = 0
-while index < len(args):
-    if args[index] == '-p':
-        displayDistribution = True
-        index = index + 1
-    if args[index] == '-e':
-        index = index + 1
-        enchantend = (int)(args[index])
-        index = index + 1
-    if args[index] == '-b':
-        index = index + 1
-        enchantstart = (int)(args[index])
-        index = index + 1
-    if args[index] == '-c':
-        index = index + 1
-        stonechance = (float)(args[index])
-        index = index + 1
-    if args[index] == '-s':
-        index = index + 1
-        simtime = (int)(args[index])
-        index = index + 1
-
-simtime = 10
+simtime = 100000
 simresults = []
+
+
 for i in range(simtime):
-    gear = GearPeice()
-    print(gear.enchantLevel)
-    while(gear.canEnchant()):
-        gear.enchant(enchantmentStones[gear.enchantLevel])
-        print(gear)
+    gear = GearPeice(enchantLevel=0)
+#    while(gear.enchantLevel < 12):
+#        gear.enchant(enchantmentStones[gear.enchantLevel])
     simresults.append(gear)
 
-#sortResults()
+
+def enchant(results):
+    for result in results:
+        while(result.enchantLevel < 12):
+            result.enchant(enchantmentStones[result.enchantLevel])
+
+threads = []
+for res in [simresults[x:x+10000] for x in range(0, len(simresults), 10000)]:
+    thread = threading.Thread(target=enchant, args=(res,))
+    thread.start()
+    threads.append(thread)
+for thread in threads:
+    thread.join()
 
 simresults.sort()
 
-totalGTE10 = 0
+maxCost = simresults[-1].cost
 
+numberofbins = 30
+binsize = maxCost / numberofbins
+
+bins = []
+
+count = 0
+cost = 0
+stones = 0
 for res in simresults:
-    print(res)
+    count = count + 1
+    cost = cost + res.cost
+    stones = stones + len(res.stonelist)
+    if res > (binsize * (len(bins) + 1)):
+        bins.append([count, cost / count, stones / count])
+        count = 0
+        cost = 0
+        stones = 0
+#for res in simresults:
+#    print(res)
+
+def binkey(item):
+    return item[0]
+
+maxwidth = 70
+eimarkcheck = 0
+for (i, bin) in enumerate(bins):
+    eimarkcheck = eimarkcheck + bin[0]
+    if (eimarkcheck / simtime) < 0.8:
+        print(Fore.GREEN, end='')
+    else:
+        print(Fore.WHITE, end='')
+    print("%5dkk, <=%4d stones" % (math.floor(bin[1] / 1000000), bin[2]), end='\t')
+    for i in range(round(bin[0] / max(bins, key=binkey)[0] * maxwidth)):
+        print("#", end='')
+    print()
+
+print(len(bins))
